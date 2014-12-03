@@ -99,7 +99,6 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 		latSpan, lonSpan          float64
 		err                       error
 	)
-	fmt.Println(r.URL)
 	para := mux.Vars(r)
 	if i0, err = strconv.Atoi(para["i"]); err != nil {
 		return
@@ -114,8 +113,11 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	if size_index, err = strconv.Atoi(para["size"]); err != nil {
 		return
 	}
+
 	pStart := XYToLonLat(i0, j0, zoom)
 	pEnd := XYToLonLat(i0+1, j0+1, zoom)
+	fmt.Printf("%f\t%f\t%f\t%f\t", pStart.lat, pStart.lon, pEnd.lat, pEnd.lon)
+	fmt.Println(r.URL)
 	size := 1 << (uint)(size_index)
 	latSpan = (pEnd.lat - pStart.lat) / (float64)(size)
 	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
@@ -130,16 +132,23 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			x := (int)((p.lat - math.Floor(p.lat)) * (float64)(img.Bounds().Max.X))
-			y := (int)((p.lon - math.Floor(p.lon)) * (float64)(img.Bounds().Max.Y))
+			//y := (int)((p.lon - math.Floor(p.lon)) * (float64)(img.Bounds().Max.Y))
+			y := img.Bounds().Max.Y - (int)((p.lon-math.Floor(p.lon))*(float64)(img.Bounds().Max.Y))
 			gray, _, _, _ := img.At(x, y).RGBA()
 			binary.Write(w, binary.LittleEndian, float32(int16(gray)))
+			//w.Write([]byte(strconv.Itoa((int)((int16)(gray)))))
+			//w.Write([]byte("\t"))
 		}
+		//w.Write([]byte("\n"))
 	}
 }
 
 func main() {
+
 	route := mux.NewRouter()
 	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}/", mapHandler).Methods("GET")
 	http.Handle("/", route)
-	http.ListenAndServe(":8000", nil)
+	http.ListenAndServe(":8001", nil)
+
+	//fmt.Println(lnglatToXY(119, 40, 17))
 }
