@@ -148,7 +148,7 @@ func main() {
 	route := mux.NewRouter()
 	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}/", mapHandler).Methods("GET")
 	http.Handle("/", route)
-	http.ListenAndServe(":8001", nil)
+	http.ListenAndServe(":8000", nil)
 
 	//fmt.Println(lnglatToXY(119, 40, 17))
 }
