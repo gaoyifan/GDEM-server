@@ -16,3 +16,11 @@ The height data server for GDEM
     # cd /path/to/project/src
     # editor GDEM-server.go   #modify prefix, port and etc as you like
     # go run GDEM-server.go
+
+# Download Map Data
+
+You can downlaod the GDEM v2 Map Data(global data) which is converted to png format:
+
+    http://pan.baidu.com/s/1pJBT1qz
+
+Or you can just downlaod the data you need.
