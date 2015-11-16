@@ -15,10 +15,10 @@ import (
 )
 
 var (
-	prefix     string = "map/ASTGTM2_"
-	suffix     string = "_dem.png"
-	imageCache *lru.Cache
-    imageCacheLen int = 20
+	prefix        string = "map/ASTGTM2_"
+	suffix        string = "_dem.png"
+	imageCache    *lru.Cache
+	imageCacheLen int = 20
 )
 
 type Point struct {
@@ -156,8 +156,8 @@ func main() {
 	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}", mapHandler).Methods("GET")
 	http.Handle("/", route)
 	err := http.ListenAndServe(":8000", nil)
-    if err!=nil{
-        fmt.Println(err)
-    }
+	if err != nil {
+		fmt.Println(err)
+	}
 	//fmt.Println(lnglatToXY(119, 40, 17))
 }
