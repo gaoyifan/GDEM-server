@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/golang-lru"
 	"image"
 	"image/png"
 	"math"
@@ -14,9 +15,10 @@ import (
 )
 
 var (
-	prefix   string = "map/ASTGTM2_"
-	suffix   string = "_dem.png"
-	imageMap map[PointInt]image.Image
+	prefix     string = "map/ASTGTM2_"
+	suffix     string = "_dem.png"
+	imageCache *lru.Cache
+    imageCacheLen int = 20
 )
 
 type Point struct {
@@ -34,8 +36,12 @@ func (c Point) toInt() PointInt {
 	return r
 }
 func init() {
-	imageMap = make(map[PointInt]image.Image)
+	var err error
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	imageCache, err = lru.New(imageCacheLen)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func XYToLonLat(xtile, ytile int, zoom uint) Point {
@@ -77,19 +83,20 @@ func getImageFileName(p PointInt) string {
 
 func getImage(p Point) image.Image {
 	pInt := p.toInt()
-	img, exist := imageMap[pInt]
-	if !exist {
+	img, cached := imageCache.Get(pInt)
+	if !cached {
 		file, err := os.Open(getImageFileName(pInt))
 		if err != nil {
 			return nil
 		}
+		defer file.Close()
 		img, err = png.Decode(file)
 		if err != nil {
 			return nil
 		}
-		imageMap[pInt] = img
+		imageCache.Add(pInt, img)
 	}
-	return img
+	return img.(image.Image)
 }
 
 func mapHandler(w http.ResponseWriter, r *http.Request) {
@@ -146,9 +153,11 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 
 	route := mux.NewRouter()
-	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}/", mapHandler).Methods("GET")
+	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}", mapHandler).Methods("GET")
 	http.Handle("/", route)
-	http.ListenAndServe(":8000", nil)
-
+	err := http.ListenAndServe(":8000", nil)
+    if err!=nil{
+        fmt.Println(err)
+    }
 	//fmt.Println(lnglatToXY(119, 40, 17))
 }
