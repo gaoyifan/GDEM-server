@@ -6,6 +6,7 @@ WORKDIR /srv
 
 RUN git clone https://github.com/gaoyifan/GDEM-server.git repo \
     && go get github.com/gorilla/mux \
+    && go get github.com/hashicorp/golang-lru \
     && go build /srv/repo/main.go
 
 VOLUME /srv/map
