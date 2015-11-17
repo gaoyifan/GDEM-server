@@ -7,6 +7,10 @@ The height data server for GDEM
 2. install requirement via `go get ...`
 3. run program `go run main.go`
 
+## install by docker
+
+    docker run --restart=always --name=3dmap -d -p 8000:8000 -v /path/to/map:/srv/map gaoyfian/gdem-server
+
 ## environment installation specified in ubuntu 14.04
 
     # apt-get install golang
