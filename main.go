@@ -156,7 +156,7 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	if size_index, err = strconv.Atoi(para["size"]); err != nil {
 		return
 	}
-	fmt.Printf("%s\t", r.URL)
+	fmt.Printf("%s\n", r.URL)
 	responseCache := mapCache.Get(r.URL.String())
 
 	if responseCache.Err() == redis.Nil {
