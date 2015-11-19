@@ -134,13 +134,13 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 			p.lon = pStart.lon + (float64)(j)*lonSpan
 			img := getImage(p)
 			if img == nil {
-				binary.Write(w, binary.LittleEndian, float32(0))
+				binary.Write(w, binary.LittleEndian, int16(0))
 				continue
 			}
 			x := (int)((p.lat - math.Floor(p.lat)) * (float64)(img.Bounds().Max.X))
 			y := img.Bounds().Max.Y - (int)((p.lon-math.Floor(p.lon))*(float64)(img.Bounds().Max.Y))
 			gray, _, _, _ := img.At(x, y).RGBA()
-			binary.Write(w, binary.LittleEndian, float32(int16(gray)))
+			binary.Write(w, binary.LittleEndian, int16(gray))
 		}
 	}
 }
