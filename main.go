@@ -127,18 +127,18 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	size := 1 << (uint)(size_index)
 	latSpan = (pEnd.lat - pStart.lat) / (float64)(size)
 	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
-	for i := 0; i <= size; i++ {
+	for i := 0; i < size; i++ {
 		var p Point
 		p.lat = pEnd.lat - (float64)(i)*latSpan
-		for j := 0; j <= size; j++ {
+		for j := 0; j < size; j++ {
 			p.lon = pStart.lon + (float64)(j)*lonSpan
 			img := getImage(p)
 			if img == nil {
 				binary.Write(w, binary.LittleEndian, int16(0))
 				continue
 			}
-			x := (int)((p.lon-math.Floor(p.lon))*(float64)(img.Bounds().Max.X))
-			y := img.Bounds().Max.Y - (int)((p.lat - math.Floor(p.lat)) * (float64)(img.Bounds().Max.Y))
+			x := (int)((p.lon - math.Floor(p.lon)) * (float64)(img.Bounds().Max.X))
+			y := img.Bounds().Max.Y - (int)((p.lat-math.Floor(p.lat))*(float64)(img.Bounds().Max.Y))
 			gray, _, _, _ := img.At(x, y).RGBA()
 			binary.Write(w, binary.LittleEndian, int16(gray))
 		}
