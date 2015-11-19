@@ -28,3 +28,7 @@ You can downlaod the GDEM v2 Map Data(global data) which is converted to png for
     http://pan.baidu.com/s/1pJBT1qz
 
 Or you can just downlaod the data you need.
+
+# Usage
+Request http://url/x/y/zoom
+return Float32 Raw array
