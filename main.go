@@ -78,7 +78,7 @@ func getImageFileName(p PointInt) string {
 	} else {
 		lon_dir = "W"
 	}
-	return fmt.Sprintf("%s%s%d%s%03d%s", prefix, lat_dir, p.lat, lon_dir, p.lon, suffix)
+	return fmt.Sprintf("%s%s%02d%s%03d%s", prefix, lat_dir, p.lat, lon_dir, p.lon, suffix)
 }
 
 func getImage(p Point) image.Image {
