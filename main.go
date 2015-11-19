@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/golang-lru"
+	"gopkg.in/redis.v3"
 	"image"
 	"image/png"
 	"math"
@@ -19,6 +21,7 @@ var (
 	suffix        string = "_dem.png"
 	imageCache    *lru.Cache
 	imageCacheLen int = 20
+	mapCache      *redis.Client
 )
 
 type Point struct {
@@ -42,6 +45,10 @@ func init() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	mapCache = redis.NewClient(&redis.Options{
+		Addr: "redis:6379",
+	})
+	mapCache.ConfigSet("save", "60 10")
 }
 
 func XYToLonLat(xtile, ytile int, zoom uint) Point {
@@ -99,11 +106,40 @@ func getImage(p Point) image.Image {
 	return img.(image.Image)
 }
 
+func getMap(i0, j0 int, zoom uint, size_index int) []byte {
+	var (
+		latSpan, lonSpan float64
+		w                bytes.Buffer
+	)
+	pStart := XYToLonLat(i0, j0, zoom)
+	pEnd := XYToLonLat(i0+1, j0+1, zoom)
+	fmt.Printf("%f\t%f\t%f\t%f\n", pStart.lat, pStart.lon, pEnd.lat, pEnd.lon)
+	size := 1 << (uint)(size_index)
+	latSpan = (pEnd.lat - pStart.lat) / (float64)(size)
+	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
+	for i := 0; i < size; i++ {
+		var p Point
+		p.lat = pEnd.lat - (float64)(i)*latSpan
+		for j := 0; j < size; j++ {
+			p.lon = pStart.lon + (float64)(j)*lonSpan
+			img := getImage(p)
+			if img == nil {
+				binary.Write(&w, binary.LittleEndian, int16(0))
+				continue
+			}
+			x := (int)((p.lon - math.Floor(p.lon)) * (float64)(img.Bounds().Max.X))
+			y := img.Bounds().Max.Y - (int)((p.lat-math.Floor(p.lat))*(float64)(img.Bounds().Max.Y))
+			gray, _, _, _ := img.At(x, y).RGBA()
+			binary.Write(&w, binary.LittleEndian, int16(gray))
+		}
+	}
+	return w.Bytes()
+}
+
 func mapHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		i0, j0, size_index, zoomi int
 		zoom                      uint
-		latSpan, lonSpan          float64
 		err                       error
 	)
 	para := mux.Vars(r)
@@ -120,28 +156,23 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	if size_index, err = strconv.Atoi(para["size"]); err != nil {
 		return
 	}
-	pStart := XYToLonLat(i0, j0, zoom)
-	pEnd := XYToLonLat(i0+1, j0+1, zoom)
-	fmt.Printf("%f\t%f\t%f\t%f\t", pStart.lat, pStart.lon, pEnd.lat, pEnd.lon)
-	fmt.Println(r.URL)
-	size := 1 << (uint)(size_index)
-	latSpan = (pEnd.lat - pStart.lat) / (float64)(size)
-	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
-	for i := 0; i < size; i++ {
-		var p Point
-		p.lat = pEnd.lat - (float64)(i)*latSpan
-		for j := 0; j < size; j++ {
-			p.lon = pStart.lon + (float64)(j)*lonSpan
-			img := getImage(p)
-			if img == nil {
-				binary.Write(w, binary.LittleEndian, int16(0))
-				continue
-			}
-			x := (int)((p.lon - math.Floor(p.lon)) * (float64)(img.Bounds().Max.X))
-			y := img.Bounds().Max.Y - (int)((p.lat-math.Floor(p.lat))*(float64)(img.Bounds().Max.Y))
-			gray, _, _, _ := img.At(x, y).RGBA()
-			binary.Write(w, binary.LittleEndian, int16(gray))
+	fmt.Printf("%s\t", r.URL)
+	responseCache := mapCache.Get(r.URL.String())
+
+	if responseCache.Err() == redis.Nil {
+		response := getMap(i0, j0, zoom, size_index)
+		mapCache.Set(r.URL.String(), response, 0)
+		w.Write(response)
+	} else if responseCache.Err() != nil {
+		fmt.Println(responseCache.Err())
+		return
+	} else {
+		response, err := responseCache.Bytes()
+		if err != nil {
+			fmt.Println(err)
+			return
 		}
+		w.Write(response)
 	}
 }
 
