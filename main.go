@@ -22,6 +22,7 @@ var (
 	imageCache    *lru.Cache
 	imageCacheLen int = 20
 	mapCache      *redis.Client
+	minZoom       uint = 9
 )
 
 type Point struct {
@@ -117,6 +118,15 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 	size := 1 << (uint)(size_index)
 	latSpan = (pEnd.lat - pStart.lat) / (float64)(size)
 	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
+
+	if zoom < minZoom {
+		for i := 0; i < size; i++ {
+			for j := 0; j < size; j++ {
+				binary.Write(&w, binary.LittleEndian, int16(0))
+			}
+		}
+	}
+
 	for i := 0; i < size; i++ {
 		var p Point
 		p.lat = pEnd.lat - (float64)(i)*latSpan
