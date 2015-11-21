@@ -120,17 +120,17 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
 
 	if zoom < minZoom {
-		for i := 0; i < size; i++ {
-			for j := 0; j < size; j++ {
+		for i := 0; i <= size; i++ {
+			for j := 0; j <= size; j++ {
 				binary.Write(&w, binary.LittleEndian, int16(0))
 			}
 		}
 	}
 
-	for i := 0; i < size; i++ {
+	for i := 0; i <= size; i++ {
 		var p Point
 		p.lat = pEnd.lat - (float64)(i)*latSpan
-		for j := 0; j < size; j++ {
+		for j := 0; j <= size; j++ {
 			p.lon = pStart.lon + (float64)(j)*lonSpan
 			img := getImage(p)
 			if img == nil {
