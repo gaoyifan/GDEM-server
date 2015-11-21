@@ -9,7 +9,8 @@ The height data server for GDEM
 
 ## install by docker
 
-    docker run --restart=always --name=3dmap -d -p 8000:8000 -v /path/to/map:/srv/map gaoyfian/gdem-server
+	docker run --restart=always --name=redis -v /path/to/redis:/data -d redis:3
+    docker run --restart=always --name=gdemd -v /path/to/map:/srv/map --link redis:redis -d -p 8000:8000 gaoyfian/gdem-server
 
 ## environment installation specified in ubuntu 14.04
 
