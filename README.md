@@ -30,11 +30,9 @@ You can just use public server via the following URL:
 
 	http://gdem.yfgao.com/
 
-the server support http and https.
-
 Testing the connection by shell command:
 
-	$ curl https://gdem.yfgao.com/27054/13441/15/4  | hexdump
+	$ curl http://gdem.yfgao.com/27054/13441/15/4  | hexdump
 
 it will return the following line:
 
