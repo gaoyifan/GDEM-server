@@ -152,6 +152,7 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 		i0, j0, size_index, zoomi int
 		zoom                      uint
 		err                       error
+		response                  []byte
 	)
 	para := mux.Vars(r)
 	if i0, err = strconv.Atoi(para["i"]); err != nil {
@@ -170,21 +171,27 @@ func mapHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("%s\n", r.URL)
 	responseCache := mapCache.Get(r.URL.String())
 
-	if responseCache.Err() == redis.Nil {
-		response := getMap(i0, j0, zoom, size_index)
+	if responseCache.Err() == redis.Nil { // not cached
+		response = getMap(i0, j0, zoom, size_index)
 		mapCache.Set(r.URL.String(), response, 0)
-		w.Write(response)
-	} else if responseCache.Err() != nil {
+	} else if responseCache.Err() != nil { // redis error or not connected
+		response = getMap(i0, j0, zoom, size_index)
 		fmt.Println(responseCache.Err())
-		return
+	} else { // cached
+		response, err = responseCache.Bytes()
+	}
+
+	// write response
+	if len(response) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println(err)
 	} else {
-		response, err := responseCache.Bytes()
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		w.WriteHeader(http.StatusOK)
 		w.Write(response)
 	}
+
 }
 
 func main() {
