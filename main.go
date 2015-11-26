@@ -76,15 +76,19 @@ func getImageFileName(p PointInt) string {
 	var (
 		lat_dir, lon_dir string
 	)
-	if p.lat >= 0 {
+	if p.lat > 0 {
 		lat_dir = "N"
 	} else {
 		lat_dir = "S"
+		p.lat = -p.lat
+		p.lat++
 	}
 	if p.lon >= 0 {
 		lon_dir = "E"
 	} else {
 		lon_dir = "W"
+		p.lon = -p.lon
+		p.lon++
 	}
 	return fmt.Sprintf("%s%s%02d%s%03d%s", prefix, lat_dir, p.lat, lon_dir, p.lon, suffix)
 }
@@ -137,8 +141,10 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 					binary.Write(&w, binary.LittleEndian, int16(0))
 					continue
 				}
-				x := (int)((p.lon - math.Floor(p.lon)) * (float64)(img.Bounds().Max.X))
-				y := img.Bounds().Max.Y - (int)((p.lat-math.Floor(p.lat))*(float64)(img.Bounds().Max.Y))
+				maxX := img.Bounds().Max.X - 1
+				maxY := img.Bounds().Max.Y - 1
+				x := ((int)((p.lon-math.Floor(p.lon))*(float64)(maxX)) + maxX) % maxX
+				y := (maxY - (int)((p.lat-math.Floor(p.lat))*(float64)(maxY))) % maxY
 				gray, _, _, _ := img.At(x, y).RGBA()
 				binary.Write(&w, binary.LittleEndian, int16(gray))
 			}
