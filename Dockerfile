@@ -4,10 +4,11 @@ MAINTAINER Yifan Gao "git@gaoyifan.com"
 
 WORKDIR /srv
 
-RUN git clone https://github.com/gaoyifan/GDEM-server.git repo \
-    && go get github.com/gorilla/mux \
-    && go get github.com/hashicorp/golang-lru \
-    && go build /srv/repo/main.go
+COPY main.go main.go
+
+RUN go get github.com/gorilla/mux \
+ && go get github.com/hashicorp/golang-lru \
+ && go build /srv/main.go
 
 VOLUME /srv/map
 
