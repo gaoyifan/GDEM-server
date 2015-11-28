@@ -23,10 +23,12 @@ var (
 )
 
 const (
-	prefix        string = "map"
-	imageCacheLen int    = 20
-	minZoom       uint   = 9
-	imageLength   int    = 360
+	prefix         string = "map"
+	imageCacheLen  int    = 20
+	minZoom        uint   = 9
+	imageLength    int    = 360
+	degreeToSecond        = 3600
+	listenAddress  string = ":8000"
 )
 
 type Point struct {
@@ -36,7 +38,7 @@ type Point struct {
 	pixelX, pixelY         int //pixel in one image
 }
 
-func (p *Point)genMapInfo(){
+func (p *Point) genMapInfo() {
 	p.serialLon = int(p.lon)
 	p.serialLat = int(p.lat)
 	if p.lon <= 0 {
@@ -47,10 +49,12 @@ func (p *Point)genMapInfo(){
 		p.serialLat = -p.serialLat
 		p.serialLat++
 	}
-	p.subSerialX = ((int)((p.lon-math.Floor(p.lon))*10) + 10) % 10
-	p.subSerialY = (10 - (int)((p.lat-math.Floor(p.lat))*10)) % 10
-	p.pixelX = ((int)((p.lon-math.Floor(p.lon))*3600) + 3600) % 360
-	p.pixelY = (3600 - (int)((p.lat-math.Floor(p.lat))*3600)) % 360
+	pixelInOneDegreeX := ((int)((p.lon-math.Floor(p.lon))*degreeToSecond) + degreeToSecond) % degreeToSecond
+	pixelInOneDegreeY := (degreeToSecond - (int)((p.lat-math.Floor(p.lat))*degreeToSecond)) % degreeToSecond
+	p.subSerialX = pixelInOneDegreeX / imageLength
+	p.subSerialY = pixelInOneDegreeY / imageLength
+	p.pixelX = pixelInOneDegreeX % imageLength
+	p.pixelY = pixelInOneDegreeY % imageLength
 }
 
 func newPoint(lon, lat float64) *Point {
@@ -164,6 +168,7 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 	var (
 		latSpan, lonSpan float64
 		w                bytes.Buffer
+		img *[imageLength][imageLength]int16
 	)
 	pStart := XYToLonLat(i0, j0, zoom)
 	pEnd := XYToLonLat(i0+1, j0+1, zoom)
@@ -180,19 +185,18 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 		}
 	} else {
 		for i := 0; i <= size; i++ {
-			var p Point
-			p.lat = pEnd.lat - (float64)(i)*latSpan
+			var p *Point
+			//p.lat = pEnd.lat - (float64)(i)*latSpan
 			for j := 0; j <= size; j++ {
-				p.lon = pStart.lon + (float64)(j)*lonSpan
+				//p.lon = pStart.lon + (float64)(j)*lonSpan
+				p=newPoint(pStart.lon + (float64)(j)*lonSpan,pEnd.lat - (float64)(i)*latSpan)
 				p.genMapInfo()
-				img := getImage(&p)
+				img = getImage(p)
 				if img == nil {
 					binary.Write(&w, binary.LittleEndian, int16(0))
 					continue
 				}
-				x := ((int)((p.lon-math.Floor(p.lon))*(float64)(imageLength)) + imageLength) % imageLength
-				y := (imageLength - (int)((p.lat-math.Floor(p.lat))*(float64)(imageLength))) % imageLength
-				binary.Write(&w, binary.LittleEndian, img[x][y])
+				binary.Write(&w, binary.LittleEndian, img[p.pixelX][p.pixelY])
 			}
 		}
 	}
@@ -250,7 +254,7 @@ func main() {
 	route := mux.NewRouter()
 	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}", mapHandler).Methods("GET")
 	http.Handle("/", route)
-	err := http.ListenAndServe(":8000", nil)
+	err := http.ListenAndServe(listenAddress, nil)
 	if err != nil {
 		fmt.Println(err)
 	}
