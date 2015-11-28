@@ -24,7 +24,7 @@ var (
 
 const (
 	prefix         string = "map"
-	imageCacheLen  int    = 20
+	imageCacheLen  int    = 2000
 	minZoom        uint   = 9
 	imageLength    int    = 360
 	degreeToSecond        = 3600
