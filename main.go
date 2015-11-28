@@ -132,7 +132,7 @@ func getImage(p *Point) *[imageLength][imageLength]int16 {
 	defer imgLock.Unlock()
 
 	var img *[imageLength][imageLength]int16
-	imgInterface, cached := imageCache.Get(p)
+	imgInterface, cached := imageCache.Get(getImageFileName(p))
 	if cached {
 		img = imgInterface.(*[imageLength][imageLength]int16)
 	} else {
@@ -159,7 +159,7 @@ func getImage(p *Point) *[imageLength][imageLength]int16 {
 				}
 			}
 		}
-		imageCache.Add(p, img)
+		imageCache.Add(getImageFileName(p), img)
 	}
 	return img
 }
@@ -185,13 +185,12 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 		}
 	} else {
 		for i := 0; i <= size; i++ {
-			var p *Point
-			//p.lat = pEnd.lat - (float64)(i)*latSpan
+			var p Point
+			p.lat = pEnd.lat - (float64)(i)*latSpan
 			for j := 0; j <= size; j++ {
-				//p.lon = pStart.lon + (float64)(j)*lonSpan
-				p=newPoint(pStart.lon + (float64)(j)*lonSpan,pEnd.lat - (float64)(i)*latSpan)
+				p.lon = pStart.lon + (float64)(j)*lonSpan
 				p.genMapInfo()
-				img = getImage(p)
+				img = getImage(&p)
 				if img == nil {
 					binary.Write(&w, binary.LittleEndian, int16(0))
 					continue
