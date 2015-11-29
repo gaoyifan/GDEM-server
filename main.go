@@ -168,7 +168,6 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 	var (
 		latSpan, lonSpan float64
 		w                bytes.Buffer
-		img *[imageLength][imageLength]int16
 	)
 	pStart := XYToLonLat(i0, j0, zoom)
 	pEnd := XYToLonLat(i0+1, j0+1, zoom)
@@ -177,28 +176,43 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 	latSpan = (pEnd.lat - pStart.lat) / (float64)(size)
 	lonSpan = (pEnd.lon - pStart.lon) / (float64)(size)
 
+	result := make([][]int16,size+1)
+	for i:=range result{
+		result[i]=make([]int16,size+1)
+	}
+
 	if zoom < minZoom {
-		for i := 0; i <= size; i++ {
-			for j := 0; j <= size; j++ {
-				binary.Write(&w, binary.LittleEndian, int16(0))
-			}
-		}
 	} else {
+		var waitGroup sync.WaitGroup
+		waitGroup.Add(size + 1)
 		for i := 0; i <= size; i++ {
-			var p Point
-			p.lat = pEnd.lat - (float64)(i)*latSpan
-			for j := 0; j <= size; j++ {
-				p.lon = pStart.lon + (float64)(j)*lonSpan
-				p.genMapInfo()
-				img = getImage(&p)
-				if img == nil {
-					binary.Write(&w, binary.LittleEndian, int16(0))
-					continue
+			var lat float64
+			lat = pEnd.lat - (float64)(i)*latSpan
+			go func(i int, lat float64) {
+				var (
+					pp  Point
+					img *[imageLength][imageLength]int16
+				)
+				defer waitGroup.Done()
+				pp.lat = lat
+				for j := 0; j <= size; j++ {
+					pp.lon = pStart.lon + (float64)(j)*lonSpan
+					pp.genMapInfo()
+					img = getImage(&pp)
+					if img != nil {
+						result[i][j] = img[pp.pixelX][pp.pixelY]
+					}
 				}
-				binary.Write(&w, binary.LittleEndian, img[p.pixelX][p.pixelY])
-			}
+			}(i, lat)
+		}
+		waitGroup.Wait()
+	}
+	for i := 0; i <= size; i++ {
+		for j := 0; j <= size; j++ {
+			binary.Write(&w, binary.LittleEndian, result[i][j])
 		}
 	}
+	result=nil
 	return w.Bytes()
 }
 
