@@ -7,8 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/redis.v3"
-	"image"
-	"image/png"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"os"
@@ -17,28 +16,61 @@ import (
 )
 
 var (
-	prefix        string = "map/ASTGTM2_"
-	suffix        string = "_dem.png"
-	imageCache    *lru.Cache
-	imageCacheLen int = 20
-	mapCache      *redis.Client
-	minZoom       uint = 9
+	imageCache *lru.Cache
+	mapCache   *redis.Client
+)
+
+const (
+	prefix         string = "map"
+	imageCacheLen  int    = 2000
+	minZoom        uint   = 9
+	imageLength    int    = 360
+	degreeToSecond        = 3600
+	listenAddress  string = ":8000"
 )
 
 type Point struct {
-	lon, lat float64
+	lon, lat               float64
+	serialLon, serialLat   int //latitude and longitude for map file
+	subSerialX, subSerialY int //0.1*0.1 degree image location in 1*1 degree area
+	pixelX, pixelY         int //pixel in one image
+	imageUUID int // image UUID of the point
 }
 
-type PointInt struct {
-	lon, lat int
+func (p *Point) genMapInfo() {
+	p.serialLon = int(p.lon)
+	p.serialLat = int(p.lat)
+	p.imageUUID = 0
+	if p.lon <= 0 {
+		p.serialLon = -p.serialLon
+		p.serialLon++
+		p.imageUUID |= 1 << 0
+	}
+	if p.lat < 0 {
+		p.serialLat = -p.serialLat
+		p.serialLat++
+		p.imageUUID |= 1<<1
+	}
+	pixelInOneDegreeX := ((int)((p.lon-math.Floor(p.lon))*degreeToSecond) + degreeToSecond) % degreeToSecond
+	pixelInOneDegreeY := (degreeToSecond - (int)((p.lat-math.Floor(p.lat))*degreeToSecond)) % degreeToSecond
+	p.subSerialX = pixelInOneDegreeX / imageLength
+	p.subSerialY = pixelInOneDegreeY / imageLength
+	p.pixelX = pixelInOneDegreeX % imageLength
+	p.pixelY = pixelInOneDegreeY % imageLength
+	p.imageUUID = p.serialLon | (p.imageUUID << 8)
+	p.imageUUID = p.serialLat | (p.imageUUID << 8)
+	p.imageUUID = p.subSerialX | (p.imageUUID << 4)
+	p.imageUUID = p.subSerialY | (p.imageUUID << 4)
 }
 
-func (c Point) toInt() PointInt {
-	var r PointInt
-	r.lat = (int)(c.lat)
-	r.lon = (int)(c.lon)
-	return r
+func newPoint(lon, lat float64) *Point {
+	p := new(Point)
+	p.lon = lon
+	p.lat = lat
+	p.genMapInfo()
+	return p
 }
+
 func init() {
 	var err error
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -52,27 +84,24 @@ func init() {
 	mapCache.ConfigSet("save", "60 10")
 }
 
-func XYToLonLat(xtile, ytile int, zoom uint) Point {
+func XYToLonLat(xtile, ytile int, zoom uint) *Point {
 	var lon_deg, lat_deg float64
-	var rt Point
 	b := (1 << zoom)
 	n := float64(b)
 	lon_deg = (float64)(xtile*360)/n - 180
 	lat_deg = math.Atan(math.Sinh(math.Pi*(1-2*(float64)(ytile)/n))) * 180 / math.Pi
-	rt.lon = lon_deg
-	rt.lat = lat_deg
-	return rt
+	return newPoint(lon_deg, lat_deg)
 }
 
-func lnglatToXY(longitude, latitude float64, zoom int) (int, int) {
-	lat_rad := latitude * math.Pi / 180
+func lnglatToXY(p *Point, zoom int) (int, int) {
+	lat_rad := p.lat * math.Pi / 180
 	n := 1 << (uint)(zoom)
-	xtile := (int)(math.Floor((longitude + 180) / 360 * (float64)(n)))
+	xtile := (int)(math.Floor((p.lon + 180) / 360 * (float64)(n)))
 	ytile := (int)((1 - math.Log(math.Tan(lat_rad)+1/math.Cos(lat_rad))/math.Pi) * (float64)(n) / 2)
 	return xtile, ytile
 }
 
-func getImageFileName(p PointInt) string {
+func getImageFileName(p *Point) string {
 	var (
 		lat_dir, lon_dir string
 	)
@@ -80,41 +109,55 @@ func getImageFileName(p PointInt) string {
 		lat_dir = "N"
 	} else {
 		lat_dir = "S"
-		p.lat = -p.lat
-		p.lat++
 	}
 	if p.lon >= 0 {
 		lon_dir = "E"
 	} else {
 		lon_dir = "W"
-		p.lon = -p.lon
-		p.lon++
 	}
-	return fmt.Sprintf("%s%s%02d%s%03d%s", prefix, lat_dir, p.lat, lon_dir, p.lon, suffix)
+	return fmt.Sprintf("%s/%s%02d/%s%03d/%1d%1d", prefix, lat_dir, p.serialLat, lon_dir, p.serialLon, p.subSerialX, p.subSerialY)
 }
 
-func getImage(p Point) image.Image {
-	pInt := p.toInt()
-	img, cached := imageCache.Get(pInt)
-	if !cached {
-		file, err := os.Open(getImageFileName(pInt))
+func getImage(p *Point) *[imageLength][imageLength]int16 {
+
+	var img *[imageLength][imageLength]int16
+	imgInterface, cached := imageCache.Get(p.imageUUID)
+	if cached {
+		img = imgInterface.(*[imageLength][imageLength]int16)
+	} else {
+		file, err := os.Open(getImageFileName(p))
 		if err != nil {
 			return nil
 		}
 		defer file.Close()
-		img, err = png.Decode(file)
+
+		fileByte, err := ioutil.ReadAll(file)
 		if err != nil {
+			fmt.Println(err)
 			return nil
 		}
-		imageCache.Add(pInt, img)
+		fileBuffer := bytes.NewReader(fileByte)
+
+		img = new([imageLength][imageLength]int16)
+		for i := 0; i < imageLength; i++ {
+			for j := 0; j < imageLength; j++ {
+				err := binary.Read(fileBuffer, binary.LittleEndian, &img[i][j])
+				if err != nil {
+					fmt.Println(err)
+					return nil
+				}
+			}
+		}
+		imageCache.Add(p.imageUUID, img)
 	}
-	return img.(image.Image)
+	return img
 }
 
 func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 	var (
 		latSpan, lonSpan float64
 		w                bytes.Buffer
+		img *[imageLength][imageLength]int16
 	)
 	pStart := XYToLonLat(i0, j0, zoom)
 	pEnd := XYToLonLat(i0+1, j0+1, zoom)
@@ -130,23 +173,18 @@ func getMap(i0, j0 int, zoom uint, size_index int) []byte {
 			}
 		}
 	} else {
-
 		for i := 0; i <= size; i++ {
 			var p Point
 			p.lat = pEnd.lat - (float64)(i)*latSpan
 			for j := 0; j <= size; j++ {
 				p.lon = pStart.lon + (float64)(j)*lonSpan
-				img := getImage(p)
+				p.genMapInfo()
+				img = getImage(&p)
 				if img == nil {
 					binary.Write(&w, binary.LittleEndian, int16(0))
 					continue
 				}
-				maxX := img.Bounds().Max.X - 1
-				maxY := img.Bounds().Max.Y - 1
-				x := ((int)((p.lon-math.Floor(p.lon))*(float64)(maxX)) + maxX) % maxX
-				y := (maxY - (int)((p.lat-math.Floor(p.lat))*(float64)(maxY))) % maxY
-				gray, _, _, _ := img.At(x, y).RGBA()
-				binary.Write(&w, binary.LittleEndian, int16(gray))
+				binary.Write(&w, binary.LittleEndian, img[p.pixelX][p.pixelY])
 			}
 		}
 	}
@@ -204,7 +242,7 @@ func main() {
 	route := mux.NewRouter()
 	route.HandleFunc("/{i:[0-9]+}/{j:[0-9]+}/{zoom:[0-9]+}/{size:[0-9]+}", mapHandler).Methods("GET")
 	http.Handle("/", route)
-	err := http.ListenAndServe(":8000", nil)
+	err := http.ListenAndServe(listenAddress, nil)
 	if err != nil {
 		fmt.Println(err)
 	}
