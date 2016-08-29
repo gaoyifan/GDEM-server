@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+apk --update add --virtual build-dependencies go binutils git
+
+export GOPATH=/usr/local/src/go
+mkdir -p $GOPATH
+
+cd $ASSETS_DIR
+go get -d ./...
+go build -o gdem-server .
+strip gdem-server
+install -m755 gdem-server /usr/bin/
+
+apk del --purge build-dependencies
+rm -rf /var/cache/apk/*
+rm -rf $GOPATH

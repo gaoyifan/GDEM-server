@@ -1,18 +1,13 @@
-FROM golang:1.5
+FROM smartentry/alpine:3.4-0.3.2
 
-MAINTAINER Yifan Gao "git@gaoyifan.com"
+MAINTAINER Yifan Gao <docker@yfgao.com>
 
-WORKDIR /srv
+ADD . $ASSETS_DIR
 
-COPY main.go main.go
-
-RUN go get github.com/gorilla/mux \
- && go get github.com/hashicorp/golang-lru \
- && go get gopkg.in/redis.v3 \
- && go build /srv/main.go
-
-VOLUME /srv/map
+RUN smartentry.sh build
 
 EXPOSE 8000
 
-CMD ./main
+WORKDIR /srv
+
+CMD ["gdem-server"]
